@@ -15,10 +15,14 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 
 Write-Host "🔍 掃描系統硬碟裝置..." -ForegroundColor Cyan
 
-# 取得 OS 所在磁碟編號
-$osVolume = Get-Volume | Where-Object { $_.DriveLetter -eq [System.IO.Path]::GetPathRoot($PROFILE)[0] } | Select-Object -First 1
-$systemDiskNumber = if ($osVolume) {
-    Get-Disk | Where-Object { $_.Number -eq (Get-Partition -Volume $osVolume | Select-Object -First 1).DiskNumber } | Select-Object -ExpandProperty Number
+# 1. 直接從環境變數取得系統磁碟代號（例如 "C"），比解析 $PROFILE 更快且安全
+$systemDrive = $env:SystemDrive[0] 
+
+# 2. 直接透過 Get-Partition 篩選 DriveLetter，效率極高，避免了 Volume 的轉譯延遲
+$osPartition = Get-Partition | Where-Object { $_.DriveLetter -eq $systemDrive } | Select-Object -First 1
+
+$systemDiskNumber = if ($osPartition) {
+    $osPartition.DiskNumber
 } else {
     0
 }
@@ -79,14 +83,15 @@ foreach ($disk in $disks) {
 
 function Show-DiskList {
     Write-Host "📦 可選磁碟清單："
-    for ($i = 1; $i -lt $disks.Count; $i++) {
+    for ($i = 0; $i -lt $disks.Count; $i++) {
         $disk = $disks[$i]
         $busType = switch ($disk.BusType) {
             "ATA" { "SATA" }
             "SCSI" { "SAS" }
             default { $disk.BusType }
         }
-        Write-Host ("{0:D2}) {1,-20} 型號:{2,-25} 介面:{3}" -f $i, $disk.Name, $disk.Model, $busType)
+        # 修改處：畫面輸出編號 +1
+        Write-Host ("{0:D2}) {1,-20} 型號:{2,-25} 介面:{3}" -f ($i + 1), $disk.Name, $disk.Model, $busType)
     }
 }
 
@@ -130,24 +135,40 @@ switch ($mode) {
             }
             "b" {
                 Show-DiskList
-                $idx = Read-Host "請輸入要測試的磁碟編號"
+                $inputIdx = Read-Host "請輸入要測試的磁碟編號"
                 
-                if ($idx -match "^\d+$" -and $idx -ge 0 -and $idx -lt $disks.Count) {
-                    $selectedDisks = @($disks[$idx])
+                # 修改處：轉換輸入值並減 1 
+                if ($inputIdx -match "^\d+$") {
+                    $idx = [int]$inputIdx - 1
+                    if ($idx -ge 0 -and $idx -lt $disks.Count) {
+                        $selectedDisks = @($disks[$idx])
+                    } else {
+                        Write-Host "❌ 無效的磁碟編號（超出範圍）" -ForegroundColor Red
+                        exit 1
+                    }
                 } else {
-                    Write-Host "❌ 無效的磁碟編號" -ForegroundColor Red
+                    Write-Host "❌ 請輸入數字" -ForegroundColor Red
                     exit 1
                 }
             }
             "c" {
                 Show-DiskList
-                $start = [int](Read-Host "請輸入起始編號")
-                $end = [int](Read-Host "請輸入結束編號")
+                $inputStart = Read-Host "請輸入起始編號"
+                $inputEnd = Read-Host "請輸入結束編號"
                 
-                if ($start -ge 0 -and $end -lt $disks.Count -and $start -le $end) {
-                    $selectedDisks = $disks[$start..$end]
+                # 修改處：轉換範圍並減 1
+                if ($inputStart -match "^\d+$" -and $inputEnd -match "^\d+$") {
+                    $start = [int]$inputStart - 1
+                    $end = [int]$inputEnd - 1
+                    
+                    if ($start -ge 0 -and $end -lt $disks.Count -and $start -le $end) {
+                        $selectedDisks = $disks[$start..$end]
+                    } else {
+                        Write-Host "❌ 無效的編號範圍" -ForegroundColor Red
+                        exit 1
+                    }
                 } else {
-                    Write-Host "❌ 無效的編號範圍" -ForegroundColor Red
+                    Write-Host "❌ 起始與結束編號必須為數字" -ForegroundColor Red
                     exit 1
                 }
                 
@@ -176,24 +197,40 @@ switch ($mode) {
         switch ($submode) {
             "b" {
                 Show-DiskList
-                $idx = Read-Host "請輸入要測試的磁碟編號"
+                $inputIdx = Read-Host "請輸入要測試的磁碟編號"
                 
-                if ($idx -match "^\d+$" -and $idx -ge 0 -and $idx -lt $disks.Count) {
-                    $selectedDisks = @($disks[$idx])
+                # 修改處：轉換輸入值並減 1
+                if ($inputIdx -match "^\d+$") {
+                    $idx = [int]$inputIdx - 1
+                    if ($idx -ge 0 -and $idx -lt $disks.Count) {
+                        $selectedDisks = @($disks[$idx])
+                    } else {
+                        Write-Host "❌ 無效的磁碟編號" -ForegroundColor Red
+                        exit 1
+                    }
                 } else {
-                    Write-Host "❌ 無效的磁碟編號" -ForegroundColor Red
+                    Write-Host "❌ 請輸入數字" -ForegroundColor Red
                     exit 1
                 }
             }
             "c" {
                 Show-DiskList
-                $start = [int](Read-Host "請輸入起始編號")
-                $end = [int](Read-Host "請輸入結束編號")
+                $inputStart = Read-Host "請輸入起始編號"
+                $inputEnd = Read-Host "請輸入結束編號"
                 
-                if ($start -ge 0 -and $end -lt $disks.Count -and $start -le $end) {
-                    $selectedDisks = $disks[$start..$end]
+                # 修改處：轉換範圍並減 1
+                if ($inputStart -match "^\d+$" -and $inputEnd -match "^\d+$") {
+                    $start = [int]$inputStart - 1
+                    $end = [int]$inputEnd - 1
+                    
+                    if ($start -ge 0 -and $end -lt $disks.Count -and $start -le $end) {
+                        $selectedDisks = $disks[$start..$end]
+                    } else {
+                        Write-Host "❌ 無效的編號範圍" -ForegroundColor Red
+                        exit 1
+                    }
                 } else {
-                    Write-Host "❌ 無效的編號範圍" -ForegroundColor Red
+                    Write-Host "❌ 起始與結束編號必須為數字" -ForegroundColor Red
                     exit 1
                 }
             }
@@ -268,7 +305,8 @@ for ($i = 0; $i -lt $total; $i++) {
     $fioFile = "fio_run_$target.fio"
     $outputFile = "fio_result_$target.json"
     
-    Write-Host "📄 準備測試硬碟 [$i]: $target (型號: $($targetDisk.Model))" -ForegroundColor Cyan
+    # 修改處：終端機提示編號也配合 +1 顯示 
+    Write-Host "📄 準備測試硬碟 [$($i + 1)]: $target (型號: $($targetDisk.Model))" -ForegroundColor Cyan
     
     # 建立 FIO 配置檔案頭部
     $fioConfig = @"
@@ -371,8 +409,8 @@ new_group
             }
         }
         
-        # 輸出結果到 CSV
-        "$i,$target,$sn,$busType,8,$iops,$baseIops,$percentage,$passFail" | Out-File -FilePath $summaryFile -Append -Encoding UTF8
+        # 修改處：輸出到 CSV 報表的編號改為 ($i + 1)
+        "$($i + 1),$target,$sn,$busType,8,$iops,$baseIops,$percentage,$passFail" | Out-File -FilePath $summaryFile -Append -Encoding UTF8
         
         Write-Host "  📊 結果：IOPS=$iops, 基準=$baseIops, 變化=$percentage, 狀態=$passFail" -ForegroundColor Cyan
     }
