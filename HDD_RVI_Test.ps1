@@ -79,7 +79,7 @@ foreach ($disk in $disks) {
 
 function Show-DiskList {
     Write-Host "📦 可選磁碟清單："
-    for ($i = 0; $i -lt $disks.Count; $i++) {
+    for ($i = 1; $i -lt $disks.Count; $i++) {
         $disk = $disks[$i]
         $busType = switch ($disk.BusType) {
             "ATA" { "SATA" }
